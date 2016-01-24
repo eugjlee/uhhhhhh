@@ -7,7 +7,7 @@ $(document).on('ready', function () {
   environment.scene = undefined
   environment.renderer  = undefined
   environment.onRenderFcts = []
-  environment.dollyState = 'in'
+  environment.dollyOut = true
 
   environment.init = function (opts) {
 
@@ -15,16 +15,18 @@ $(document).on('ready', function () {
 
     this.container = document.getElementById( "container" );
 
+    this.focalPoint = new THREE.Vector3(0,0,0)
+
     /////////////////////////// set up camera /////////////////////////////
 
     this.camera = new THREE.PerspectiveCamera( 80, window.innerWidth / window.innerHeight, 0.0001, 10000 );
-    // this.camera.target = new THREE.Vector3(0,0,0)
+    this.camera.position.set(0,0,10)
+    this.camera.lookAt(this.focalPoint)
 
-    var depth = 10
-
-    this.camera.position.set(0,0,depth)
-    this.camera.lookAt(new THREE.Vector3(0,0,0))
-
+    this.screenHeight = findHeight({
+        distance : self.camera.position.distanceTo(self.focalPoint),
+        vFOV : self.camera.fov
+      })
 
     function findVFOV(opts) {
       var angleRadians = 2 * Math.atan(opts.height / (2*opts.depth) )
@@ -33,22 +35,10 @@ $(document).on('ready', function () {
     }
 
     function findHeight(opts) {
-      height = 2 * opts.distance * Math.tan(opts.vFOV/2)
+      vFOV = degreesToRadians(opts.vFOV)
+      height = 2 * opts.distance * Math.tan(vFOV/2)
       return height
     }
-
-
-    // when we start the dolly zoom, we have:
-    var currentVFOV = this.camera.fov
-    var focalPoint = new THREE.Vector3(0,0,0)
-    var cameraLocation = this.camera.position
-    // we also have
-    var totalDepthChange = 100
-
-    var currentD = cameraLocation.distanceTo(focalPoint)
-
-
-
 
     function degreesToRadians(degrees) {
       return degrees * Math.PI /180
@@ -57,53 +47,76 @@ $(document).on('ready', function () {
       return radians * 180 / Math.PI
     }
 
-    // dollyOut({
-    //   dollyD: 1000,
-    //   duration : 10000
+    // $(document).on('keypress', function (e) {
+    //   if ( e.keyCode == 100 ) {
+
+    //     animate()
+    //   }
     // })
 
-    $(document).on('keypress', function (e) {
-      if ( e.keyCode == 100 || e.keyCode == 68) {
-
-        if (self.dollyState === 'in') {
-          self.dollyState = 'out'
-          dollyOut({
-            dollyD: 3000,
-            duration : 30000
-          })
-
-
-        } else if (self.dollyState === 'out')
-          self.dollyState === 'in'
-          dollyOut({
-            dollyD: (-3000),
-            duration : 30000
-          })
-      }
-    })
-
-    function dollyOut(opts) {
-
-      var focalPoint = new THREE.Vector3(0,0,0)
-      var camera = self.camera
-
-      var newZ = camera.position.z + opts.dollyD
-      var newX = camera.position.x
-      var newy = camera.position.y
-
-
-      var tweenIncrementors = {
-        x : camera.position.x,
-        y : camera.position.y,
-        z : camera.position.z
-      }
-
-      var screenHeight = findHeight({
-        distance : camera.position.distanceTo(focalPoint),
-        vFOV : camera.fov
+    this.animate = function () {
+      var focalMove = moveFocalPoint({
+        focalPoint : randomVector(10),
+        duration : 10000
       })
 
-      console.log(camera.fov)
+      focalMove.onComplete( function () {
+        var dollyOut = dollyZoom({
+          destination: new THREE.Vector3(
+            Math.floor(Math.random()* 10000- 5000),
+            Math.floor(Math.random()* 10000- 5000),
+            Math.floor(Math.random()* 10000- 5000)
+          ),
+          duration : 10000
+        })
+
+        dollyOut.onComplete(function () {
+          var move = moveCamera({
+            destination : new THREE.Vector3(
+              Math.floor(Math.random()* 10000 - 5000),
+              Math.floor(Math.random()* 10000 - 5000),
+              Math.floor(Math.random()* 10000 - 5000)
+            ),
+            duration : 10000
+          })
+          move.onComplete(function () {
+            var dollyIn = dollyZoom({
+              destination : new THREE.Vector3(
+                Math.floor(Math.random()* 6 - 3),
+                Math.floor(Math.random()* 6 - 3),
+                Math.floor(Math.random()* 6 - 3)
+              ),
+              duration : 10000
+            })
+            dollyIn.onComplete(function () {
+              self.animate()
+            })
+          })
+        })
+      })
+    }
+
+    function randomVector(multiplier) {
+      return new THREE.Vector3(
+        Math.random()* multiplier - multiplier / 2 ,
+        Math.random()* multiplier - multiplier / 2,
+        Math.random()* multiplier - multiplier / 2
+      )
+    }
+
+    function moveCamera(opts) {
+
+      var destination = opts.destination
+
+      var newX = destination.x
+      var newy = destination.y
+      var newZ = destination.z
+
+      var tweenIncrementors = {
+        x : self.camera.position.x,
+        y : self.camera.position.y,
+        z : self.camera.position.z
+      }
 
       var tween = new TWEEN.Tween(tweenIncrementors)
           .to({
@@ -111,42 +124,100 @@ $(document).on('ready', function () {
             y : newy,
             z : newZ
           }, opts.duration)
-          .easing(TWEEN.Easing.Exponential.In)
+          .easing(TWEEN.Easing.Quadratic.InOut)
           .onUpdate(function () {
-            camera.position.set(tweenIncrementors.x, tweenIncrementors.y, tweenIncrementors.z)
+            self.camera.position.set(tweenIncrementors.x, tweenIncrementors.y, tweenIncrementors.z)
+            self.camera.lookAt(self.focalPoint)
 
             var newVFOV = findVFOV({
-              depth : camera.position.distanceTo(focalPoint),
-              height : screenHeight,
+              depth : self.camera.position.distanceTo(self.focalPoint),
+              height : self.screenHeight,
             })
-
-
-            camera.fov = newVFOV
-            camera.updateProjectionMatrix()
-
-
+            self.camera.fov = newVFOV
+            self.camera.updateProjectionMatrix()
           })
           .start();
+      return tween
+    }
+
+    function moveFocalPoint(opts) {
+      var camera = self.camera
+      var duration = opts.duration
+
+      var newFocalPointPoint = opts.focalPoint
+      var newX = newFocalPointPoint.x
+      var newy = newFocalPointPoint.y
+      var newZ = newFocalPointPoint.z
+
+      var tween = new TWEEN.Tween(self.focalPoint)
+          .to({
+            x : newX,
+            y : newy,
+            z : newZ
+          }, opts.duration)
+          .easing(TWEEN.Easing.Quadratic.InOut)
+          .onUpdate(function () {
+            self.camera.lookAt(self.focalPoint)
+
+            var newVFOV = findVFOV({
+              depth : self.camera.position.distanceTo(self.focalPoint),
+              height : self.screenHeight,
+            })
+            self.camera.fov = newVFOV
+            self.camera.updateProjectionMatrix()
+          })
+          .start();
+      return tween
     }
 
 
+    function dollyZoom(opts) {
+      var destination = opts.destination
+
+      var currentDistance = self.camera.position.distanceTo(self.focalPoint)
+      var newDistance = destination.distanceTo(self.focalPoint)
+      var easing = TWEEN.Easing.Circular.InOut
+
+      var newX = destination.x
+      var newy = destination.y
+      var newZ = destination.z
+
+      var tweenIncrementors = {
+        x : self.camera.position.x,
+        y : self.camera.position.y,
+        z : self.camera.position.z
+      }
+
+      var tween = new TWEEN.Tween(tweenIncrementors)
+          .to({
+            x : newX,
+            y : newy,
+            z : newZ
+          }, opts.duration)
+          .easing(easing)
+          .onUpdate(function () {
+            self.camera.position.set(tweenIncrementors.x, tweenIncrementors.y, tweenIncrementors.z)
+            self.camera.lookAt(self.focalPoint)
+
+            var newVFOV = findVFOV({
+              depth : self.camera.position.distanceTo(self.focalPoint),
+              height : self.screenHeight,
+            })
+
+            self.camera.fov = newVFOV
+            self.camera.updateProjectionMatrix()
+          })
+          .start();
+      return tween
+    }
 
     /////////////////////////// set up controls /////////////////////////////
 
-    this.controls = new THREE.OrbitControls( this.camera, this.container );
-    // this.controls.maxDistance = 5
-    // this.controls.minDistance = 1.7
-    this.controls.zoomSpeed = 0.2
-    // this.controls.target = new THREE.Vector3(0,0,0)
-    this.controls.mouseButtons = { ORBIT: THREE.MOUSE.LEFT, ZOOM: THREE.MOUSE.MIDDLE };
+    // this.controls = new THREE.OrbitControls( this.camera, this.container );
+    // this.controls.zoomSpeed = 0.2
+    // this.controls.mouseButtons = { ORBIT: THREE.MOUSE.LEFT, ZOOM: THREE.MOUSE.MIDDLE };
 
-    this.onRenderFcts.push(this.controls.update)
-
-    // setInterval(function () {
-    //   self.controls.manualDolly({
-    //     scale : 1
-    //   }), 1000
-    // })
+    // this.onRenderFcts.push(this.controls.update)
 
     /////////////////////////// set up scene /////////////////////////////
 
@@ -158,17 +229,11 @@ $(document).on('ready', function () {
     this.renderer.setClearColor( 0xffffff );
     this.renderer.setPixelRatio( window.devicePixelRatio );
     this.renderer.setSize( window.innerWidth, window.innerHeight );
-    // this.renderer.sortObjects = false;
     this.container.appendChild( this.renderer.domElement );
 
     ///////////////////// On Window Resize ////////////////////////
 
     var windowResize = new THREEx.WindowResize(this.renderer, this.camera)
-
-    ///////////////////////////////////// AxisHelper ////////////////////////////////////////
-
-    // this.axisHelper = new THREE.AxisHelper( 50 );
-    // this.scene.add( this.axisHelper );
 
     ///////////////////////////////////// Stats ////////////////////////////////////////
 
@@ -190,7 +255,7 @@ $(document).on('ready', function () {
       stats.end();
     })
 
-    var rendererStats   = new THREEx.RendererStats()
+    var rendererStats = new THREEx.RendererStats()
 
     rendererStats.domElement.style.position = 'absolute'
     rendererStats.domElement.style.right = '0px'
@@ -219,53 +284,13 @@ $(document).on('ready', function () {
 
     ///////////////////////// adding & removing objects from scene /////////////////////////////////
 
-    this.addObjectsToScene = function (objects) {
-      forEach(objects, self.addObjectToScene)
-    }
-
     this.addObjectToScene = function (object) {
       self.scene.add(object.mesh)
     }
 
-    this.removeObjectFromScene = function (object) {
-      self.scene.remove( object.mesh )
-    }
-
-    this.removeObjectsFromScene = function (objects) { // duplicate of ebove function
-      forEach( objects, self.removeObjectFromScene )
-    }
-
-    // //////////////////////////////////// create the cube ////////////////////////////////////////////////
-
-    // this.jSONloader.load('./assets/geometries/axis-cube.json', function (geometry) {
-    //   var cubeMaterial = new THREE.MeshBasicMaterial({shading: THREE.FlatShading, color: 0xffffff, side: THREE.DoubleSide});
-    //   var cube = new THREE.Mesh(geometry, cubeMaterial)
-    //   self.scene.add(cube)
-    // })
-
-    // //////////////////////////////////// create axis guides ////////////////////////////////////////////////
-
-    // this.axisGuides = new AxisGuides()
-    // this.addObjectsToScene(this.axisGuides.lines)
-
-
-
-
     this.cubeGroup = new CubeGroup()
 
     this.addObjectToScene(this.cubeGroup)
-
-// var geometry = new THREE.CubeGeometry(1, 1, 1);
-// geometry.position= new THREE.Vector3(0,0,0)
-// var material = new THREE.MeshNormalMaterial({shading: THREE.FlatShading});
-// var mesh = new THREE.Mesh(geometry, material);
-// this.scene.add(mesh);
-
-
-
-
-
-
 
 
     //////////////////////////////////////////////////////////////////////////////
@@ -300,11 +325,12 @@ $(document).on('ready', function () {
       // update TWEEN functions
       TWEEN.update(nowMsec);
 
-
     })
   }
 
   environment.init()
+
+  // environment.animate()
 
   environment.render()
 

@@ -22,7 +22,6 @@
     "threex.windowresize": "*",
     "tween.js": "tweenjs#~16.3.4",
     "stats.js": "mrdoob/stats.js#r14",
-    "threex.rendererstats": "*",
-    "lodash": "~4.0.0"
+    "threex.rendererstats": "*"
   }
 }
