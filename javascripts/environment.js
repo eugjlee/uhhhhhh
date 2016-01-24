@@ -328,11 +328,11 @@ $(document).on('ready', function () {
     })
   }
 
-  // environment.init()
+  environment.init()
 
-  // environment.animate()
+  environment.animate()
 
-  // environment.render()
+  environment.render()
 
 
   function forEach(array, action) {
