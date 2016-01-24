@@ -305,6 +305,7 @@ $(document).on('ready', function () {
 
   environment.render = function () {
 
+    var self = this
     var lastTimeMsec = null
     requestAnimationFrame(function animate(nowMsec){
 
